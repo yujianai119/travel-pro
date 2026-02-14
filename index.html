@@ -27,6 +27,10 @@
             background-color: #F8FAFC;
             margin: 0;
             font-family: system-ui, -apple-system, sans-serif;
+            box-sizing: border-box;
+        }
+        *, *::before, *::after {
+            box-sizing: inherit;
         }
     </style>
 </head>
@@ -38,7 +42,9 @@
         (function() {
             // 註冊 Service Worker
             if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('sw.js').then(() => console.log('App Ready'));
+                navigator.serviceWorker.register('sw.js')
+                    .then(() => console.log('App Ready'))
+                    .catch(err => console.error('Service Worker registration failed:', err));
             }
 
             // 禁用右鍵與所有開發者快捷鍵
@@ -68,7 +74,14 @@
             const [activeTab, setActiveTab] = useState('transport');
             
             // 加密票價數據
-            const fareData = useMemo(() => JSON.parse(atob("eyLljZfmuK8t5bem54eZIjpbMTUzMCwxNDgwXSwi6Ie65YyXLeW3mueHmeI6WzE0OTAsMTQ0NV0sIuaht+Wcky3lt5rnh5miOlsxMzMwLDEyODBdLCLmlrDnq7kt5bem54eZIjpbMTIwMCwxMTUwXSwi6IuX5belLeW3mueHmeI6WzEwNjAsMTAxNV0sIuiHuuS4reTlt5rnh5miOls3OTAsNzYwXSwi6Ie65Y2XLeW3mueHmeI6WzE0MCwxMzVdfQ==")), []);
+            const fareData = useMemo(() => {
+                try {
+                    return JSON.parse(atob("eyLljZfmuK8t5bem54eZIjpbMTUzMCwxNDgwXSwi6Ie65YyXLeW3mueHmeI6WzE0OTAsMTQ0NV0sIuaht+Wcky3lt5rnh5miOlsxMzMwLDEyODBdLCLmlrDnq7kt5bem54eZIjpbMTIwMCwxMTUwXSwi6IuX5belLeW3mueHmeI6WzEwNjAsMTAxNV0sIuiHuuS4reTlt5rnh5miOls3OTAsNzYwXSwi6Ie65Y2XLeW3mueHmeI6WzE0MCwxMzVdfQ=="));
+                } catch (error) {
+                    console.error("Failed to decode fare data:", error);
+                    return [];
+                }
+            }, []);
 
             return React.createElement('div', { className: 'max-w-md mx-auto min-h-screen bg-white shadow-xl' },
                 // 頂部導覽
