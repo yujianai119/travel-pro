@@ -8,13 +8,8 @@ import {
 } from 'lucide-react';
 
 /**
- * 旅遊規劃管理系統 (Travel Planner Pro) - v31.7 介面純淨精算版
- * 葉先生您好，此版本移除下載按鈕，修正匯率精算公式，並維持全中文視覺平衡。
- * * [更新日誌]
- * 1. UI Cleanup: 移除右上角「下載原始碼」按鈕與選單。
- * 2. Formula Guard: 確保換算結果精確抓取表格數據 (100美金現鈔買進 = 3,212)。
- * 3. Pure Chinese: 移除全系統英文字代碼，維持「新台幣」正名。
- * 4. Typography: 最小字放大 1 號，最大字縮小 1 號，視覺比例最佳化。
+ * 旅遊規劃管理系統 (Travel Planner Pro) - v31.9
+ * 葉先生您好，此版本已移除 GitHub 按鈕，回歸純淨專業管理介面。
  */
 
 // ==========================================
@@ -23,7 +18,7 @@ import {
 
 const CONFIG = {
   YOUBIKE_API: "https://tcgbusfs.blob.core.windows.net/dotapp/youbike/v2/youbike_immediate.json",
-  STORAGE_KEY: "travel_data_v31_7_stable",
+  STORAGE_KEY: "travel_data_v31_9_stable",
 };
 
 const PROXY_STRATEGIES = [
@@ -52,7 +47,7 @@ const TRANSPORT_DATA = {
   INTERNATIONAL: {
     "東北亞": { "日本": ["東京成田", "大阪關西", "羽田機場"], "韓國": ["首爾仁川", "釜山金海"] },
     "港澳大陸": { "港澳": ["香港機場", "澳門機場"], "中國": ["上海浦東", "北京首都"] },
-    "東南亞": { "新馬": ["新加坡機場", "吉隆坡機場"], "泰越": ["曼谷機場", "胡志明機場"] },
+    "東南亞": { "新馬": ["新加坡機場", "吉隆龍坡機場"], "泰越": ["曼谷機場", "胡志明機場"] },
     "歐美大洋": { "美洲": ["洛杉磯", "紐約"], "歐洲": ["倫敦", "巴黎"] }
   }
 };
@@ -227,16 +222,13 @@ const ExchangeRateModal = ({ isOpen, onClose }) => {
   const sourceObj = useMemo(() => rates.find(r => r.code === sourceCode) || rates[0], [sourceCode, rates]);
   const targetObj = useMemo(() => rates.find(r => r.code === targetCode) || rates[0], [targetCode, rates]);
   
-  // 核心精算公式：確保買進/賣出精確指向
   const calcResult = useMemo(() => {
     if (!sourceObj || !targetObj) return "0";
     try {
       const typeKey = rateType.toLowerCase().includes('cash') ? 'cash' : 'spot';
       const actionKey = rateType.toLowerCase().includes('buy') ? 'buy' : 'sell';
-      
       const sRate = Number(sourceObj[typeKey]?.[actionKey] || 0);
       const tRate = Number(targetObj[typeKey]?.[actionKey] || 1);
-      
       const res = (Number(amount || 0) * sRate) / tRate;
       return res.toLocaleString(undefined, { maximumFractionDigits: 0 });
     } catch { return "0"; }
@@ -256,7 +248,6 @@ const ExchangeRateModal = ({ isOpen, onClose }) => {
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-10 animate-in fade-in zoom-in-95 duration-500">
       <div className="absolute inset-0 bg-slate-900/85 backdrop-blur-2xl" onClick={onClose}></div>
       <div className="bg-white w-full max-w-7xl rounded-[3rem] md:rounded-[4rem] shadow-3xl relative overflow-hidden flex flex-col max-h-[95vh]">
-        
         <div className="px-10 py-6 border-b border-slate-50 flex justify-between items-center bg-white">
           <div className="flex items-center gap-5">
             <div className="bg-gradient-to-br from-amber-400 to-orange-500 p-4 rounded-2xl text-white shadow-xl rotate-3"><Coins size={28}/></div>
@@ -267,10 +258,7 @@ const ExchangeRateModal = ({ isOpen, onClose }) => {
           </div>
           <button onClick={onClose} className="p-4 bg-slate-50 rounded-full hover:bg-rose-50 hover:text-rose-500 transition-all shadow-inner active:scale-90"><X size={22}/></button>
         </div>
-
         <div className="flex-1 overflow-y-auto p-6 md:p-10 space-y-10">
-          
-          {/* 計算機區塊 */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch bg-slate-50 p-8 rounded-[4rem] border border-slate-100 shadow-inner">
             <div className="lg:col-span-9 flex flex-col gap-6">
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -299,7 +287,6 @@ const ExchangeRateModal = ({ isOpen, onClose }) => {
                 </div>
               </div>
             </div>
-
             <div className="lg:col-span-3 bg-gradient-to-br from-indigo-600 to-indigo-800 p-8 rounded-[3rem] text-white flex flex-col justify-center relative overflow-hidden shadow-2xl">
               <div className="absolute -right-5 -bottom-5 opacity-10 rotate-12"><Calculator size={100} /></div>
               <div className="relative z-10 space-y-2 text-center lg:text-left">
@@ -311,37 +298,21 @@ const ExchangeRateModal = ({ isOpen, onClose }) => {
               </div>
             </div>
           </div>
-
           <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
-              <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3">
-                <div className="w-2 h-6 bg-indigo-600 rounded-full"></div> 匯率
-              </h3>
+              <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3"><div className="w-2 h-6 bg-indigo-600 rounded-full"></div> 匯率看板</h3>
               <div className="flex items-center gap-4">
                 <p className="text-base font-bold text-slate-400">最後更新：<span className="tabular-nums">{lastUpdate}</span></p>
-                <button 
-                  onClick={handleRefresh} 
-                  disabled={isRefreshing}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-2xl font-black text-slate-600 shadow-sm hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
-                >
-                  <RotateCw size={18} className={isRefreshing ? 'animate-spin' : ''}/>
-                  手動更新
-                </button>
+                <button onClick={handleRefresh} disabled={isRefreshing} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-2xl font-black text-slate-600 shadow-sm hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"><RotateCw size={18} className={isRefreshing ? 'animate-spin' : ''}/> 手動更新</button>
               </div>
             </div>
-
             <div className="overflow-hidden border border-slate-100 rounded-[3.5rem] shadow-xl bg-white">
               <table className="w-full text-left border-collapse min-w-[800px]">
                 <thead><tr className="bg-slate-50/50 border-b border-slate-100"><th className="px-8 py-5 text-base font-black uppercase tracking-[0.1em] text-slate-400">幣別名稱</th><th className="px-8 py-5 text-base font-black uppercase tracking-[0.1em] text-indigo-600">現鈔買進</th><th className="px-8 py-5 text-base font-black uppercase tracking-[0.1em] text-rose-600 bg-rose-50/30">現鈔賣出 (重要)</th><th className="px-8 py-5 text-base font-black uppercase tracking-[0.1em] text-indigo-600">即期買進</th><th className="px-8 py-5 text-base font-black uppercase tracking-[0.1em] text-sky-600">即期賣出</th></tr></thead>
                 <tbody className="divide-y divide-slate-50">
                   {rates.filter(r=>r.code!=='新台幣').map(r => (
                     <tr key={r.code} className="hover:bg-slate-50/40 transition-all group">
-                      <td className="px-8 py-5">
-                        <div className="flex items-center gap-5">
-                          <span className="text-5xl group-hover:scale-110 transition-transform duration-500">{r.icon}</span>
-                          <div><p className="text-2xl font-black text-slate-800 tracking-tighter leading-none">{r.name}</p></div>
-                        </div>
-                      </td>
+                      <td className="px-8 py-5"><div className="flex items-center gap-5"><span className="text-5xl group-hover:scale-110 transition-transform duration-500">{r.icon}</span><div><p className="text-2xl font-black text-slate-800 tracking-tighter leading-none">{r.name}</p></div></div></td>
                       <td className="px-8 py-5 font-black text-2xl text-slate-900 opacity-80">{r.cash.buy}</td>
                       <td className="px-8 py-5 bg-rose-50/10 font-black text-4xl text-rose-600 drop-shadow-sm">{r.cash.sell}</td>
                       <td className="px-8 py-5 font-black text-2xl text-slate-900 opacity-80">{r.spot.buy}</td>
@@ -364,7 +335,7 @@ const Header = ({ onShowTransport, onScrollToForm, onShowExchange }) => {
     <header className="flex flex-col md:flex-row justify-between items-center mb-16 gap-8 px-4">
       <div className="flex items-center gap-6">
         <div className="bg-gradient-to-br from-indigo-500 to-sky-600 p-5 rounded-[1.75rem] shadow-2xl text-white transform hover:rotate-6 transition-all duration-500"><Plane size={36} className="drop-shadow-lg" /></div>
-        <div><h1 className="text-3xl md:text-5xl font-black text-slate-800 tracking-tighter leading-none">旅遊管家 <span className="text-indigo-600 italic">Pro</span></h1><p className="text-base font-black text-slate-400 tracking-[0.2em] uppercase opacity-60 mt-2">葉先生專屬 · v31.7 旗艦精算修正版</p></div>
+        <div><h1 className="text-3xl md:text-5xl font-black text-slate-800 tracking-tighter leading-none">旅遊管家 <span className="text-indigo-600 italic">Pro</span></h1><p className="text-base font-black text-slate-400 tracking-[0.2em] uppercase opacity-60 mt-2">葉先生專屬 · v31.9 旗艦純淨介面版</p></div>
       </div>
       <div className="flex flex-wrap justify-center gap-4">
         <button onClick={onShowExchange} className="flex items-center gap-3 px-8 py-5 rounded-3xl font-black bg-white border-2 border-amber-100 text-amber-700 hover:bg-amber-50 shadow-xl shadow-amber-50 group transition-all"><Coins size={24} className="text-amber-500 group-hover:scale-125 transition-transform" /> 匯率中心</button>
@@ -390,24 +361,17 @@ const App = () => {
     <div className="min-h-screen bg-[#FDFDFE] p-10 md:p-20 font-sans text-slate-800 selection:bg-indigo-600 transition-all duration-1000">
       <div className="max-w-7xl mx-auto">
         <Header onShowTransport={() => setShowTransport(!showTransport)} onScrollToForm={() => formRef.current?.scrollIntoView({behavior:'smooth'})} onShowExchange={() => setShowExchange(true)} />
-        
-        {showTransport && (
-          <div className="animate-in fade-in slide-in-from-top-10 duration-700">
-             <TransportHub youBike={youBike} transportSearch={transportSearch} />
-          </div>
-        )}
-        
+        {showTransport && <div className="animate-in fade-in slide-in-from-top-10 duration-700"><TransportHub youBike={youBike} transportSearch={transportSearch} /></div>}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-20 px-2">
           <div className="bg-white p-12 rounded-[4rem] shadow-2xl border border-slate-50 flex items-center gap-10 group hover:border-emerald-200 transition-all duration-700 cursor-default">
             <div className="bg-gradient-to-br from-emerald-400 to-emerald-600 p-8 rounded-[2.5rem] text-white group-hover:scale-110 shadow-2xl shadow-emerald-100"><DollarSign size={48}/></div>
-            <div><p className="text-base font-black text-slate-400 uppercase tracking-[0.5em] mb-3">預算總預算</p><p className="text-4xl md:text-5xl font-black text-slate-800 tabular-nums leading-none">新台幣 {totalBudget.toLocaleString()} 元</p></div>
+            <div><p className="text-base font-black text-slate-400 uppercase tracking-[0.5em] mb-3">累積總預算</p><p className="text-4xl md:text-5xl font-black text-slate-800 tabular-nums leading-none">新台幣 {totalBudget.toLocaleString()} 元</p></div>
           </div>
           <div className="bg-white p-12 rounded-[4rem] shadow-2xl border border-slate-100 flex items-center gap-10 group hover:border-sky-200 transition-all duration-700 cursor-default">
             <div className="bg-gradient-to-br from-sky-400 to-sky-600 p-8 rounded-[2.5rem] text-white group-hover:scale-110 shadow-2xl shadow-sky-100"><MapIcon size={48}/></div>
-            <div><p className="text-base font-black text-slate-400 uppercase tracking-[0.5em] mb-3">行程站點數</p><p className="text-4xl md:text-5xl font-black text-slate-800 tabular-nums">{itineraries.length} 站</p></div>
+            <div><p className="text-base font-black text-slate-400 uppercase tracking-[0.5em] mb-3">計畫站點數</p><p className="text-4xl md:text-5xl font-black text-slate-800 tabular-nums">{itineraries.length} 站</p></div>
           </div>
         </div>
-
         <div className="space-y-10 mb-32">
           {itineraries.sort((a,b)=>a.date.localeCompare(b.date)).map(item => (
             <div key={item.id} className="bg-white p-12 rounded-[4rem] shadow-xl border border-slate-100 flex gap-10 relative overflow-hidden group hover:shadow-3xl transition-all duration-700">
@@ -423,7 +387,6 @@ const App = () => {
             </div>
           ))}
         </div>
-
         <section ref={formRef} className="bg-white p-16 md:p-24 rounded-[6rem] shadow-3xl border border-slate-50 mb-28 relative overflow-hidden group">
           <h2 className="text-4xl md:text-5xl font-black mb-16 flex items-center gap-6 text-slate-800 relative z-10"><div className="bg-indigo-600 p-4 rounded-[1.5rem] text-white shadow-2xl rotate-12"><Plus size={40}/></div> 建立新計畫</h2>
           <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.target); setItineraries([...itineraries, { id: Date.now(), date: fd.get('date'), location: fd.get('location'), category: fd.get('category'), budget: fd.get('budget') }]); e.target.reset(); }} className="space-y-14 relative z-10">
@@ -438,7 +401,7 @@ const App = () => {
         </section>
       </div>
       <ExchangeRateModal isOpen={showExchange} onClose={() => setShowExchange(false)} />
-      <footer className="text-center text-slate-300 text-base font-black pb-32 tracking-[1.5em] uppercase opacity-20">旅遊管家Pro 旗艦純淨架構</footer>
+      <footer className="text-center text-slate-300 text-base font-black pb-32 tracking-[1.5em] uppercase opacity-20">旅遊管家Pro 旗艦純淨介面架構</footer>
     </div>
   );
 };
