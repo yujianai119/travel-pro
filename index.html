@@ -1,0 +1,492 @@
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { 
+  Trash2, Plus, Plane, Calendar, Clock, MapPin, 
+  Hotel, Car, Utensils, Globe, DollarSign, Map as MapIcon, 
+  Bike, RefreshCw, Loader2, AlertTriangle, Train, 
+  TrainFront, ArrowRight, Database, Circle, MapPinned, 
+  Search, ShieldCheck, Coins, X, Calculator, TrendingUp, RotateCw
+} from 'lucide-react';
+
+/**
+ * 旅遊規劃管理系統 (Travel Planner Pro) - v31.9
+ * 葉先生您好，此版本已移除 GitHub 按鈕，回歸純淨專業管理介面。
+ */
+
+// ==========================================
+// 1. 配置與代理設定
+// ==========================================
+
+const CONFIG = {
+  YOUBIKE_API: "https://tcgbusfs.blob.core.windows.net/dotapp/youbike/v2/youbike_immediate.json",
+  STORAGE_KEY: "travel_data_v31_9_stable",
+};
+
+const PROXY_STRATEGIES = [
+  { name: "代理一", url: (t) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(t)}`, type: "direct" },
+  { name: "代理二", url: (t) => `https://corsproxy.io/?${encodeURIComponent(t)}`, type: "direct" },
+  { name: "代理三", url: (t) => `https://api.allorigins.win/get?url=${encodeURIComponent(t)}`, type: "wrapped" }
+];
+
+const CATEGORIES = [
+  { id: 'flight', label: '機票訂購', icon: Plane, color: 'bg-blue-600', light: 'bg-blue-50', text: 'text-blue-600' },
+  { id: 'hotel', label: '旅館住宿', icon: Hotel, color: 'bg-indigo-600', light: 'bg-indigo-50', text: 'text-indigo-600' },
+  { id: 'transport', label: '交通工具', icon: Car, color: 'bg-purple-600', light: 'bg-purple-50', text: 'text-purple-600' },
+  { id: 'food', label: '餐飲美食', icon: Utensils, color: 'bg-orange-600', light: 'bg-orange-50', text: 'text-orange-600' },
+  { id: 'activity', label: '景點活動', icon: MapPin, color: 'bg-emerald-600', light: 'bg-emerald-50', text: 'text-emerald-600' },
+  { id: 'other', label: '其他項目', icon: Globe, color: 'bg-slate-600', light: 'bg-slate-50', text: 'text-slate-600' },
+];
+
+const TRANSPORT_DATA = {
+  TRA: ['臺北', '基隆', '南港', '松山', '板橋', '桃園', '中壢', '新竹', '苗栗', '臺中', '彰化', '雲林', '嘉義', '臺南', '左營', '高雄', '花蓮', '臺東'],
+  THSR: ['南港', '臺北', '板橋', '桃園', '新竹', '苗栗', '臺中', '彰化', '雲林', '嘉義', '臺南', '左營'],
+  DEPARTURES: ["高雄小港", "桃園國際", "台北松山", "台中清泉崗"],
+  DOMESTIC: {
+    "離島航線": { "澎湖": ["馬公機場"], "金門": ["金門機場"], "馬祖": ["南竿機場"], "台東離島": ["蘭嶼機場", "綠島機場"] },
+    "本島航線": { "花蓮": ["花蓮機場"], "台東": ["台東機場"] }
+  },
+  INTERNATIONAL: {
+    "東北亞": { "日本": ["東京成田", "大阪關西", "羽田機場"], "韓國": ["首爾仁川", "釜山金海"] },
+    "港澳大陸": { "港澳": ["香港機場", "澳門機場"], "中國": ["上海浦東", "北京首都"] },
+    "東南亞": { "新馬": ["新加坡機場", "吉隆龍坡機場"], "泰越": ["曼谷機場", "胡志明機場"] },
+    "歐美大洋": { "美洲": ["洛杉磯", "紐約"], "歐洲": ["倫敦", "巴黎"] }
+  }
+};
+
+const THSR_FARE_DB = {
+  "南港-左營": [1530, 1480], "臺北-左營": [1490, 1445], "板橋-左營": [1460, 1405], "桃園-左營": [1330, 1280], "新竹-左營": [1200, 1150],
+  "苗栗-左營": [1060, 1015], "臺中-左營": [790, 760], "彰化-左營": [670, 645], "雲林-左營": [560, 540], "嘉義-嘉義": [410, 395], "臺南-左營": [140, 135]
+};
+
+const TIME_SLOTS = [];
+for (let i = 0; i < 24; i++) {
+  const h = i.toString().padStart(2, '0');
+  TIME_SLOTS.push(`${h}:00`, `${h}:30`);
+}
+
+// ==========================================
+// 2. 工具函式
+// ==========================================
+
+const Utils = {
+  formatTime: (timeStr) => {
+    if (!timeStr) return "無資料";
+    const s = String(timeStr);
+    if (s.includes('-')) return s;
+    if (s.length >= 14) return `${s.substring(0, 4)}年${s.substring(4, 6)}月${s.substring(6, 8)}日 ${s.substring(8, 10)}:${s.substring(10, 12)}`;
+    return s;
+  },
+  getThsrFare: (start, end) => {
+    const key = `${start}-${end}`, rev = `${end}-${start}`;
+    const fares = THSR_FARE_DB[key] || THSR_FARE_DB[rev];
+    return fares ? { standard: fares[0], nonReserved: fares[1] } : { standard: 1490, nonReserved: 1445 };
+  }
+};
+
+// ==========================================
+// 3. 數據引擎
+// ==========================================
+
+const MockService = {
+  getExchangeRates: () => [
+    { code: '美金', name: '美金', icon: '🇺🇸', cash: { buy: '32.12', sell: '32.79' }, spot: { buy: '32.47', sell: '32.57' } },
+    { code: '日圓', name: '日圓', icon: '🇯🇵', cash: { buy: '0.208', sell: '0.221' }, spot: { buy: '0.214', sell: '0.218' } },
+    { code: '新台幣', name: '新台幣', icon: '🇹🇼', cash: { buy: '1.000', sell: '1.000' }, spot: { buy: '1.000', sell: '1.000' } },
+    { code: '歐元', name: '歐元', icon: '🇪🇺', cash: { buy: '34.25', sell: '35.59' }, spot: { buy: '34.87', sell: '34.97' } },
+    { code: '人民幣', name: '人民幣', icon: '🇨🇳', cash: { buy: '4.38', sell: '4.54' }, spot: { buy: '4.46', sell: '4.48' } },
+    { code: '港幣', name: '港幣', icon: '🇭🇰', cash: { buy: '4.02', sell: '4.22' }, spot: { buy: '4.14', sell: '4.20' } },
+    { code: '韓元', name: '韓元', icon: '🇰🇷', cash: { buy: '0.021', sell: '0.026' }, spot: { buy: '0.023', sell: '0.024' } },
+    { code: '新幣', name: '新幣', icon: '🇸🇬', cash: { buy: '23.85', sell: '24.75' }, spot: { buy: '24.25', sell: '24.45' } },
+    { code: '英鎊', name: '英鎊', icon: '🇬🇧', cash: { buy: '40.65', sell: '42.77' }, spot: { buy: '41.65', sell: '42.05' } },
+    { code: '澳幣', name: '澳幣', icon: '🇦🇺', cash: { buy: '21.05', sell: '21.83' }, spot: { buy: '21.32', sell: '21.55' } },
+    { code: '泰銖', name: '泰銖', icon: '🇹🇭', cash: { buy: '0.82', sell: '1.01' }, spot: { buy: '0.94', sell: '0.98' } },
+  ],
+  generateSchedule: (type, params) => {
+    const schedules = [];
+    const queryDateStr = params?.date || new Date().toISOString().split('T')[0];
+    const baseTime = new Date(queryDateStr);
+    const [qH, qM] = (params?.time || "08:00").split(':').map(Number);
+    baseTime.setHours(isNaN(qH) ? 8 : qH, isNaN(qM) ? 0 : qM, 0, 0);
+
+    const AIRLINE_INFO = {
+      '長榮': { name: '長榮航空', color: 'bg-emerald-300' }, '華航': { name: '中華航空', color: 'bg-blue-300' },
+      '星宇': { name: '星宇航空', color: 'bg-amber-300' }, '國泰': { name: '國泰航空', color: 'bg-teal-300' },
+      '立榮': { name: '立榮航空', color: 'bg-lime-200' }, '華信': { name: '華信航空', color: 'bg-sky-300' },
+      '新航': { name: '新加坡航空', color: 'bg-indigo-300' }
+    };
+
+    const keys = Object.keys(AIRLINE_INFO);
+    for (let i = 0; i < 6; i++) {
+      const departure = new Date(baseTime.getTime() + i * (40 * 60000) + Math.random() * 600000);
+      let duration = 60, price = 1000, priceNonReserved = null, trainNo = "", colorClass = "bg-slate-200", airlineName = "", trainTypeName = "", typeLabel = "航班", stops = [];
+
+      if (type === 'TRA') {
+        const trainTypes = [{ name: '普悠瑪', color: 'bg-rose-300', speed: 1.5 }, { name: '自強號', color: 'bg-orange-300', speed: 1.3 }, { name: '區間快', color: 'bg-emerald-300', speed: 0.9 }];
+        const st = trainTypes[Math.floor(Math.random() * trainTypes.length)];
+        const sIdx = TRANSPORT_DATA.TRA.indexOf(params.start);
+        const eIdx = TRANSPORT_DATA.TRA.indexOf(params.end);
+        const dist = Math.abs((sIdx === -1 ? 0 : sIdx) - (eIdx === -1 ? 1 : eIdx)) || 1;
+        duration = Math.max(35, Math.floor(dist * 25 * (1 / st.speed))); price = Math.max(45, Math.floor(dist * 62));
+        trainNo = `${st.name} ${100 + i*4}`; colorClass = st.color; trainTypeName = st.name;
+        const range = TRANSPORT_DATA.TRA.slice(Math.min(sIdx, eIdx), Math.max(sIdx, eIdx) + 1); if (sIdx > eIdx) range.reverse();
+        stops = range.length > 5 ? [range[0], "...", range[Math.floor(range.length/2)], "...", range[range.length-1]] : range;
+        typeLabel = "火車";
+      } else if (type === 'THSR') {
+        const fares = Utils.getThsrFare(params.start, params.end);
+        const sIdx = TRANSPORT_DATA.THSR.indexOf(params.start);
+        const eIdx = TRANSPORT_DATA.THSR.indexOf(params.end);
+        const dist = Math.abs((sIdx === -1 ? 0 : sIdx) - (eIdx === -1 ? 1 : eIdx)) || 1;
+        price = fares.standard; priceNonReserved = fares.nonReserved;
+        const hsrTypes = [{ name: '直達', code: '1', color: 'bg-emerald-400', policy: 'major' }, { name: '跳站', code: '6', color: 'bg-orange-300', policy: 'skip' }, { name: '站站停', code: '8', color: 'bg-amber-200', policy: 'all' }];
+        let sel = (['南港', '臺北', '板橋', '臺中', '左營'].includes(params.start) && Math.random() > 0.5) ? hsrTypes[0] : (Math.random() > 0.4 ? hsrTypes[1] : hsrTypes[2]);
+        trainNo = `${sel.code}${String((i + 1) * 2).padStart(3, '0')}`; colorClass = sel.color; trainTypeName = sel.name;
+        duration = Math.max(20, Math.floor(dist * 12 * (sel.code === '1' ? 0.8 : 1)));
+        const range = TRANSPORT_DATA.THSR.slice(Math.min(sIdx, eIdx), Math.max(sIdx, eIdx) + 1); if (sIdx > eIdx) range.reverse();
+        stops = sel.policy === 'major' ? range.filter(s => ['南港', '臺北', '板橋', '臺中', '左營', params.start, params.end].includes(s)) : (sel.policy === 'skip' ? range.filter((s, idx) => idx === 0 || idx === range.length - 1 || Math.random() > 0.3) : range);
+        typeLabel = "高鐵";
+      } else {
+        const key = keys[Math.floor(Math.random() * keys.length)];
+        const info = AIRLINE_INFO[key];
+        airlineName = info.name; colorClass = info.color;
+        price = type === 'FLIGHT_INTL' ? 12000 + (i*200) : 2250 + (i*80);
+        duration = type === 'FLIGHT_INTL' ? 210 : 50;
+        trainNo = `${key}${100 + i * 5}`; trainTypeName = (params.departure || "高雄小港");
+        typeLabel = "航班";
+      }
+      const arrival = new Date(departure.getTime() + duration * 60000);
+      schedules.push({
+        id: `${type}-${Date.now()}-${i}`, code: trainNo, departure: departure.toTimeString().slice(0, 5), arrival: arrival.toTimeString().slice(0, 5),
+        duration: `${Math.floor(duration/60)}時 ${duration%60}分`, price, priceNonReserved, status: '準點', colorClass, airlineName, trainType: trainTypeName, type: typeLabel, stops, date: queryDateStr 
+      });
+    }
+    return schedules;
+  }
+};
+
+// ==========================================
+// 4. 自定義 Hooks
+// ==========================================
+
+const useYouBike = () => {
+  const [stations, setStations] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState("待機");
+  const fetchData = useCallback(async () => {
+    setLoading(true); setConnectionStatus("連線中");
+    let success = false;
+    for (const strategy of PROXY_STRATEGIES) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const response = await fetch(strategy.url(CONFIG.YOUBIKE_API) + `?t=${Date.now()}`, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (!response.ok) throw new Error();
+        let data = await response.json();
+        const finalData = strategy.type === "wrapped" ? (data.contents ? JSON.parse(data.contents) : data) : data;
+        if (Array.isArray(finalData) && finalData.length > 0) {
+          setStations(finalData); setConnectionStatus("連線成功");
+          success = true; break;
+        }
+      } catch { }
+    }
+    if (!success) setConnectionStatus("連線失敗");
+    setLoading(false);
+  }, []);
+  return { stations, loading, connectionStatus, fetchData };
+};
+
+const useTransportSearch = () => {
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const search = (type, params) => {
+    if (!params) return;
+    setSearching(true); setResults([]);
+    setTimeout(() => { setResults(MockService.generateSchedule(type, params)); setSearching(false); }, 600);
+  };
+  return { results, searching, search, clear: () => setResults([]) };
+};
+
+// ==========================================
+// 5. 視覺組件層
+// ==========================================
+
+// 匯率交換彈窗
+const ExchangeRateModal = ({ isOpen, onClose }) => {
+  const [amount, setAmount] = useState(100);
+  const [sourceCode, setSourceCode] = useState('美金'); 
+  const [targetCode, setTargetCode] = useState('新台幣'); 
+  const [rateType, setRateType] = useState('cashBuy'); 
+  const [lastUpdate, setLastUpdate] = useState(new Date().toLocaleTimeString('zh-TW', { hour12: false }));
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  const rates = useMemo(() => MockService.getExchangeRates(), []);
+  const sourceObj = useMemo(() => rates.find(r => r.code === sourceCode) || rates[0], [sourceCode, rates]);
+  const targetObj = useMemo(() => rates.find(r => r.code === targetCode) || rates[0], [targetCode, rates]);
+  
+  const calcResult = useMemo(() => {
+    if (!sourceObj || !targetObj) return "0";
+    try {
+      const typeKey = rateType.toLowerCase().includes('cash') ? 'cash' : 'spot';
+      const actionKey = rateType.toLowerCase().includes('buy') ? 'buy' : 'sell';
+      const sRate = Number(sourceObj[typeKey]?.[actionKey] || 0);
+      const tRate = Number(targetObj[typeKey]?.[actionKey] || 1);
+      const res = (Number(amount || 0) * sRate) / tRate;
+      return res.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    } catch { return "0"; }
+  }, [amount, rateType, sourceObj, targetObj]);
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    setTimeout(() => {
+      setLastUpdate(new Date().toLocaleTimeString('zh-TW', { hour12: false }));
+      setIsRefreshing(false);
+    }, 800);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-10 animate-in fade-in zoom-in-95 duration-500">
+      <div className="absolute inset-0 bg-slate-900/85 backdrop-blur-2xl" onClick={onClose}></div>
+      <div className="bg-white w-full max-w-7xl rounded-[3rem] md:rounded-[4rem] shadow-3xl relative overflow-hidden flex flex-col max-h-[95vh]">
+        <div className="px-10 py-6 border-b border-slate-50 flex justify-between items-center bg-white">
+          <div className="flex items-center gap-5">
+            <div className="bg-gradient-to-br from-amber-400 to-orange-500 p-4 rounded-2xl text-white shadow-xl rotate-3"><Coins size={28}/></div>
+            <div>
+              <h2 className="text-3xl font-black text-slate-800 tracking-tighter leading-none">匯率交換</h2>
+              <p className="text-base font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">新台幣即期與現鈔精算中心</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-4 bg-slate-50 rounded-full hover:bg-rose-50 hover:text-rose-500 transition-all shadow-inner active:scale-90"><X size={22}/></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 md:p-10 space-y-10">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch bg-slate-50 p-8 rounded-[4rem] border border-slate-100 shadow-inner">
+            <div className="lg:col-span-9 flex flex-col gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <p className="text-base font-black uppercase tracking-widest text-slate-400 ml-1">一、來源幣別</p>
+                  <select value={sourceCode} onChange={e=>setSourceCode(e.target.value)} className="w-full bg-white p-4 rounded-2xl font-black text-lg outline-none shadow-sm border border-slate-100">
+                    {rates.map(r => <option key={r.code} value={r.code}>{r.icon} {r.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-base font-black uppercase tracking-widest text-indigo-500 ml-1">二、輸入金額</p>
+                  <input type="number" value={amount} onChange={e=>setAmount(e.target.value)} className="w-full bg-white p-4 rounded-2xl font-black text-2xl text-indigo-700 outline-none shadow-sm border border-slate-100" placeholder="0" />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-base font-black uppercase tracking-widest text-slate-400 ml-1">三、目標幣別</p>
+                  <select value={targetCode} onChange={e=>setTargetCode(e.target.value)} className="w-full bg-white p-4 rounded-2xl font-black text-lg outline-none shadow-sm border border-slate-100">
+                    {rates.map(r => <option key={r.code} value={r.code}>{r.icon} {r.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-base font-black uppercase tracking-widest text-slate-400 ml-1">四、匯率類型</p>
+                  <select value={rateType} onChange={e=>setRateType(e.target.value)} className="w-full bg-white p-4 rounded-2xl font-black text-lg outline-none shadow-sm border border-slate-100">
+                    <option value="cashBuy">現鈔買進</option><option value="cashSell">現鈔賣出 (換鈔)</option>
+                    <option value="spotBuy">即期買進</option><option value="spotSell">即期賣出 (匯款)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="lg:col-span-3 bg-gradient-to-br from-indigo-600 to-indigo-800 p-8 rounded-[3rem] text-white flex flex-col justify-center relative overflow-hidden shadow-2xl">
+              <div className="absolute -right-5 -bottom-5 opacity-10 rotate-12"><Calculator size={100} /></div>
+              <div className="relative z-10 space-y-2 text-center lg:text-left">
+                <p className="text-base font-black uppercase tracking-widest opacity-60">計算結果</p>
+                <div className="flex items-baseline gap-2 justify-center lg:justify-start">
+                  <span className="text-base font-bold text-indigo-200">新台幣</span>
+                  <span className="text-4xl font-black tracking-tighter tabular-nums drop-shadow-md">{calcResult}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
+              <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3"><div className="w-2 h-6 bg-indigo-600 rounded-full"></div> 匯率看板</h3>
+              <div className="flex items-center gap-4">
+                <p className="text-base font-bold text-slate-400">最後更新：<span className="tabular-nums">{lastUpdate}</span></p>
+                <button onClick={handleRefresh} disabled={isRefreshing} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-2xl font-black text-slate-600 shadow-sm hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"><RotateCw size={18} className={isRefreshing ? 'animate-spin' : ''}/> 手動更新</button>
+              </div>
+            </div>
+            <div className="overflow-hidden border border-slate-100 rounded-[3.5rem] shadow-xl bg-white">
+              <table className="w-full text-left border-collapse min-w-[800px]">
+                <thead><tr className="bg-slate-50/50 border-b border-slate-100"><th className="px-8 py-5 text-base font-black uppercase tracking-[0.1em] text-slate-400">幣別名稱</th><th className="px-8 py-5 text-base font-black uppercase tracking-[0.1em] text-indigo-600">現鈔買進</th><th className="px-8 py-5 text-base font-black uppercase tracking-[0.1em] text-rose-600 bg-rose-50/30">現鈔賣出 (重要)</th><th className="px-8 py-5 text-base font-black uppercase tracking-[0.1em] text-indigo-600">即期買進</th><th className="px-8 py-5 text-base font-black uppercase tracking-[0.1em] text-sky-600">即期賣出</th></tr></thead>
+                <tbody className="divide-y divide-slate-50">
+                  {rates.filter(r=>r.code!=='新台幣').map(r => (
+                    <tr key={r.code} className="hover:bg-slate-50/40 transition-all group">
+                      <td className="px-8 py-5"><div className="flex items-center gap-5"><span className="text-5xl group-hover:scale-110 transition-transform duration-500">{r.icon}</span><div><p className="text-2xl font-black text-slate-800 tracking-tighter leading-none">{r.name}</p></div></div></td>
+                      <td className="px-8 py-5 font-black text-2xl text-slate-900 opacity-80">{r.cash.buy}</td>
+                      <td className="px-8 py-5 bg-rose-50/10 font-black text-4xl text-rose-600 drop-shadow-sm">{r.cash.sell}</td>
+                      <td className="px-8 py-5 font-black text-2xl text-slate-900 opacity-80">{r.spot.buy}</td>
+                      <td className="px-8 py-5 font-black text-2xl text-sky-600">{r.spot.sell}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div className="p-8 bg-slate-50/50 text-center text-slate-300 text-base font-black border-t border-slate-100 uppercase">※ 匯率資訊依銀行掛牌為準 · 僅供預算規劃參考</div>
+      </div>
+    </div>
+  );
+};
+
+const Header = ({ onShowTransport, onScrollToForm, onShowExchange }) => {
+  return (
+    <header className="flex flex-col md:flex-row justify-between items-center mb-16 gap-8 px-4">
+      <div className="flex items-center gap-6">
+        <div className="bg-gradient-to-br from-indigo-500 to-sky-600 p-5 rounded-[1.75rem] shadow-2xl text-white transform hover:rotate-6 transition-all duration-500"><Plane size={36} className="drop-shadow-lg" /></div>
+        <div><h1 className="text-3xl md:text-5xl font-black text-slate-800 tracking-tighter leading-none">旅遊管家 <span className="text-indigo-600 italic">Pro</span></h1><p className="text-base font-black text-slate-400 tracking-[0.2em] uppercase opacity-60 mt-2">葉先生專屬 · v31.9 旗艦純淨介面版</p></div>
+      </div>
+      <div className="flex flex-wrap justify-center gap-4">
+        <button onClick={onShowExchange} className="flex items-center gap-3 px-8 py-5 rounded-3xl font-black bg-white border-2 border-amber-100 text-amber-700 hover:bg-amber-50 shadow-xl shadow-amber-50 group transition-all"><Coins size={24} className="text-amber-500 group-hover:scale-125 transition-transform" /> 匯率中心</button>
+        <button onClick={onShowTransport} className="flex items-center gap-3 px-10 py-5 rounded-3xl font-black bg-indigo-600 text-white shadow-2xl hover:bg-indigo-700 hover:-translate-y-1 transition-all"><TrainFront size={24} /> 交通中心</button>
+        <button onClick={onScrollToForm} className="bg-slate-800 text-white px-10 py-5 rounded-3xl font-black shadow-2xl hover:bg-slate-700 hover:-translate-y-1 transition-all flex items-center gap-3"><Plus size={24} /> 建立計畫</button>
+      </div>
+    </header>
+  );
+};
+
+const App = () => {
+  const [itineraries, setItineraries] = useState(() => { try { return JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY)) || []; } catch { return []; } });
+  const [showExchange, setShowExchange] = useState(false);
+  const youBike = useYouBike();
+  const transportSearch = useTransportSearch();
+  const [showTransport, setShowTransport] = useState(false);
+  const formRef = useRef(null);
+  
+  useEffect(() => localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(itineraries)), [itineraries]);
+  const totalBudget = useMemo(() => itineraries.reduce((s, i) => s + (Number(i.budget) || 0), 0), [itineraries]);
+
+  return (
+    <div className="min-h-screen bg-[#FDFDFE] p-10 md:p-20 font-sans text-slate-800 selection:bg-indigo-600 transition-all duration-1000">
+      <div className="max-w-7xl mx-auto">
+        <Header onShowTransport={() => setShowTransport(!showTransport)} onScrollToForm={() => formRef.current?.scrollIntoView({behavior:'smooth'})} onShowExchange={() => setShowExchange(true)} />
+        {showTransport && <div className="animate-in fade-in slide-in-from-top-10 duration-700"><TransportHub youBike={youBike} transportSearch={transportSearch} /></div>}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-20 px-2">
+          <div className="bg-white p-12 rounded-[4rem] shadow-2xl border border-slate-50 flex items-center gap-10 group hover:border-emerald-200 transition-all duration-700 cursor-default">
+            <div className="bg-gradient-to-br from-emerald-400 to-emerald-600 p-8 rounded-[2.5rem] text-white group-hover:scale-110 shadow-2xl shadow-emerald-100"><DollarSign size={48}/></div>
+            <div><p className="text-base font-black text-slate-400 uppercase tracking-[0.5em] mb-3">累積總預算</p><p className="text-4xl md:text-5xl font-black text-slate-800 tabular-nums leading-none">新台幣 {totalBudget.toLocaleString()} 元</p></div>
+          </div>
+          <div className="bg-white p-12 rounded-[4rem] shadow-2xl border border-slate-100 flex items-center gap-10 group hover:border-sky-200 transition-all duration-700 cursor-default">
+            <div className="bg-gradient-to-br from-sky-400 to-sky-600 p-8 rounded-[2.5rem] text-white group-hover:scale-110 shadow-2xl shadow-sky-100"><MapIcon size={48}/></div>
+            <div><p className="text-base font-black text-slate-400 uppercase tracking-[0.5em] mb-3">計畫站點數</p><p className="text-4xl md:text-5xl font-black text-slate-800 tabular-nums">{itineraries.length} 站</p></div>
+          </div>
+        </div>
+        <div className="space-y-10 mb-32">
+          {itineraries.sort((a,b)=>a.date.localeCompare(b.date)).map(item => (
+            <div key={item.id} className="bg-white p-12 rounded-[4rem] shadow-xl border border-slate-100 flex gap-10 relative overflow-hidden group hover:shadow-3xl transition-all duration-700">
+              <div className={`absolute left-0 top-0 bottom-0 w-3 ${CATEGORIES.find(c=>c.id===item.category)?.color}`}></div>
+              <div className="flex-1 pl-6">
+                <div className="flex items-center gap-6 mb-6">
+                  <span className={`text-base font-black px-6 py-2 rounded-full uppercase tracking-[0.3em] shadow-sm border ${CATEGORIES.find(c=>c.id===item.category)?.light} ${CATEGORIES.find(c=>c.id===item.category)?.text}`}>{CATEGORIES.find(c=>c.id===item.category)?.label}</span>
+                  <span className="text-base font-black text-slate-300 flex items-center gap-3"><Calendar size={20}/> {item.date}</span>
+                </div>
+                <h3 className="text-4xl md:text-5xl font-black text-slate-800 tracking-tighter leading-tight">{item.location}</h3>
+              </div>
+              <button onClick={() => setItineraries(itineraries.filter(i => i.id !== item.id))} className="text-slate-100 hover:text-rose-500 hover:bg-rose-50 p-8 rounded-[2.5rem] duration-500 active:scale-75 shadow-sm self-center"><Trash2 size={40}/></button>
+            </div>
+          ))}
+        </div>
+        <section ref={formRef} className="bg-white p-16 md:p-24 rounded-[6rem] shadow-3xl border border-slate-50 mb-28 relative overflow-hidden group">
+          <h2 className="text-4xl md:text-5xl font-black mb-16 flex items-center gap-6 text-slate-800 relative z-10"><div className="bg-indigo-600 p-4 rounded-[1.5rem] text-white shadow-2xl rotate-12"><Plus size={40}/></div> 建立新計畫</h2>
+          <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.target); setItineraries([...itineraries, { id: Date.now(), date: fd.get('date'), location: fd.get('location'), category: fd.get('category'), budget: fd.get('budget') }]); e.target.reset(); }} className="space-y-14 relative z-10">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+              <div className="space-y-4"><label className="text-base font-black text-slate-400 uppercase tracking-[0.5em] ml-4">項目類別</label><select name="category" className="w-full bg-slate-50 p-8 rounded-[2rem] font-black text-xl outline-none border-2 border-transparent focus:border-indigo-200 transition-all shadow-inner">{CATEGORIES.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select></div>
+              <div className="space-y-4"><label className="text-base font-black text-slate-400 uppercase tracking-[0.5em] ml-4">計畫日期</label><input type="date" name="date" required className="w-full bg-slate-50 p-8 rounded-[2rem] font-black text-xl outline-none shadow-inner border-2 border-transparent focus:border-indigo-100" /></div>
+              <div className="space-y-4"><label className="text-base font-black text-slate-400 uppercase tracking-[0.5em] ml-4">預算配置 (新台幣)</label><input type="number" name="budget" placeholder="金額" className="w-full bg-slate-50 p-8 rounded-[2rem] font-black text-xl outline-none shadow-inner border-2 border-transparent focus:border-indigo-100" /></div>
+            </div>
+            <div className="space-y-4"><label className="text-base font-black text-slate-400 uppercase tracking-[0.5em] ml-4">目的地描述</label><input name="location" placeholder="輸入地點名稱..." required className="w-full bg-slate-50 p-8 rounded-[2rem] font-black text-2xl outline-none shadow-inner border-2 border-transparent focus:border-indigo-100" /></div>
+            <button type="submit" className="w-full bg-slate-900 text-white p-10 rounded-[3rem] font-black text-3xl shadow-3xl hover:bg-indigo-600 hover:-translate-y-2 transition-all duration-500">保存至行程計畫表</button>
+          </form>
+        </section>
+      </div>
+      <ExchangeRateModal isOpen={showExchange} onClose={() => setShowExchange(false)} />
+      <footer className="text-center text-slate-300 text-base font-black pb-32 tracking-[1.5em] uppercase opacity-20">旅遊管家Pro 旗艦純淨介面架構</footer>
+    </div>
+  );
+};
+
+const TransportHub = ({ youBike, transportSearch }) => {
+  const [activeTab, setActiveTab] = useState('youbike');
+  const [params, setParams] = useState({ date: new Date().toISOString().split('T')[0], time: '09:00', start: '臺北', end: '基隆', departure: '高雄小港', region: '', country: '', location: '' });
+  const [ybDistrict, setYbDistrict] = useState("");
+  const [ybStation, setYbStation] = useState("");
+  const handleTabChange = (id) => {
+    setActiveTab(id); transportSearch.clear();
+    setParams(prev => ({ ...prev, region: '', country: '', location: '', start: '臺北', end: (id === 'thsr' ? '左營' : '基隆') }));
+    if (id === 'youbike') youBike.fetchData();
+  };
+  useEffect(() => { if (activeTab === 'youbike') youBike.fetchData(); }, []);
+  const currentPath = useMemo(() => activeTab === 'intl' ? TRANSPORT_DATA.INTERNATIONAL : (activeTab === 'dom' ? TRANSPORT_DATA.DOMESTIC : null), [activeTab]);
+  const currentYbInfo = useMemo(() => {
+    if (!ybStation || !youBike.stations.length) return null;
+    const s = youBike.stations.find(st => String(st.sno) === String(ybStation));
+    return s ? { name: s.sna.replace("YouBike2.0_", ""), bikes: s.available_rent_bikes ?? s.sbi ?? 0, spaces: s.available_return_bikes ?? s.bemp ?? 0, time: Utils.formatTime(s.mday) } : null;
+  }, [ybStation, youBike.stations]);
+
+  return (
+    <div className="bg-white border border-slate-50 p-0 rounded-[4rem] mb-20 shadow-2xl overflow-hidden">
+      <div className="flex bg-slate-50/80 backdrop-blur-3xl border-b border-slate-100 p-5 gap-4 overflow-x-auto scrollbar-hide">
+        {[{ id: 'youbike', label: '微笑單車', icon: Bike, active: 'border-yellow-200 text-yellow-600' }, { id: 'tra', label: '台鐵時刻', icon: Train, active: 'border-blue-200 text-blue-700' }, { id: 'thsr', label: '高鐵時刻', icon: TrainFront, active: 'border-orange-200 text-orange-600' }, { id: 'intl', label: '國際航班', icon: Plane, active: 'border-sky-200 text-sky-600' }, { id: 'dom', label: '國內航班', icon: Globe, active: 'border-emerald-200 text-emerald-600' }].map(tab => (
+          <button key={tab.id} onClick={() => handleTabChange(tab.id)} className={`flex-1 flex items-center justify-center gap-4 py-6 px-10 rounded-[2.5rem] font-black text-lg transition-all whitespace-nowrap ${activeTab === tab.id ? `bg-white shadow-2xl border-2 ${tab.active}` : 'text-slate-400 opacity-70 hover:opacity-100'}`}><tab.icon size={26} /> {tab.label}</button>
+        ))}
+      </div>
+      <div className="p-12 md:p-20 bg-white">
+        {activeTab === 'youbike' ? (
+          <div className="space-y-12 animate-in fade-in duration-700">
+            <div className="flex justify-between items-center bg-slate-50/50 p-8 rounded-[3rem] border border-slate-100 shadow-inner">
+              <div className={`px-8 py-4 rounded-full text-base font-black uppercase flex items-center gap-4 ${youBike.connectionStatus === '連線成功' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>{youBike.connectionStatus === '連線成功' ? <ShieldCheck size={20}/> : <AlertTriangle size={20}/>} {youBike.connectionStatus}</div>
+              <button onClick={youBike.fetchData} className="bg-white p-5 rounded-[1.5rem] shadow-xl border border-slate-100 hover:text-indigo-600 transition-all active:scale-90"><RefreshCw size={32} className={youBike.loading ? 'animate-spin' : ''}/></button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+              <div className="space-y-4"><label className="text-base font-black text-slate-400 uppercase tracking-widest ml-3">區域選擇</label><select className="w-full bg-slate-50 p-8 rounded-[2rem] border-2 border-transparent focus:border-yellow-300 font-black text-xl outline-none shadow-inner" value={ybDistrict} onChange={e => { setYbDistrict(e.target.value); setYbStation(""); }}>{["", ...new Set(youBike.stations.map(s => s.sarea))].sort().map(d => <option key={d} value={d}>{d || "請選擇行政區"}</option>)}</select></div>
+              <div className="space-y-4"><label className="text-base font-black text-slate-400 uppercase tracking-widest ml-3">站點選擇</label><select className="w-full bg-slate-50 p-8 rounded-[2rem] border-2 border-transparent focus:border-yellow-300 font-black text-xl outline-none shadow-inner" value={ybStation} onChange={e => setYbStation(e.target.value)} disabled={!ybDistrict}><option value="">請選擇站點</option>{youBike.stations.filter(s => s.sarea === ybDistrict).map(s => <option key={s.sno} value={s.sno}>{s.sna.replace("YouBike2.0_", "")}</option>)}</select></div>
+            </div>
+            {currentYbInfo && (
+              <div className="bg-gradient-to-br from-yellow-50 to-amber-100 p-16 rounded-[4rem] border border-yellow-200 flex flex-col xl:flex-row justify-between items-center gap-16 mt-12 shadow-2xl animate-in zoom-in-95">
+                <div className="text-center xl:text-left"><h3 className="text-5xl font-black text-slate-800 mb-6 tracking-tighter leading-none">{currentYbInfo.name}</h3><p className="text-base text-amber-800/60 font-black flex items-center justify-center xl:justify-start gap-3 bg-white/40 px-6 py-3 rounded-full inline-flex"><Clock size={20}/> 更新時間：{currentYbInfo.time}</p></div>
+                <div className="flex gap-8"><div className="bg-white px-16 py-12 rounded-[3.5rem] shadow-2xl text-center border-b-[12px] border-yellow-400 group hover:-translate-y-2 transition-all"><p className="text-base text-yellow-700 font-black uppercase mb-4 tracking-widest">可借車輛</p><p className="text-8xl font-black text-yellow-600 tabular-nums leading-none">{currentYbInfo.bikes}</p></div><div className="bg-white px-16 py-12 rounded-[3.5rem] shadow-2xl text-center border-b-[12px] border-slate-300 group hover:-translate-y-2 transition-all"><p className="text-base text-slate-500 font-black uppercase mb-4 tracking-widest">空位數量</p><p className="text-8xl font-black text-slate-700 tabular-nums leading-none">{currentYbInfo.spaces}</p></div></div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-12 animate-in fade-in duration-700">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+              {activeTab === 'intl' || activeTab === 'dom' ? (
+                <>
+                  <div className="space-y-4"><label className="text-base font-black text-slate-400 uppercase tracking-widest ml-3">出發機場</label><select className="w-full bg-slate-50 p-8 rounded-[2rem] border-2 border-transparent focus:border-sky-300 font-black text-xl outline-none shadow-inner" value={params.departure} onChange={e => setParams({...params, departure: e.target.value})}>{TRANSPORT_DATA.DEPARTURES.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
+                  <div className="space-y-4"><label className="text-base font-black text-indigo-500 uppercase tracking-widest ml-3 animate-pulse">目的地設定</label><div className="flex gap-5"><select className="flex-1 bg-slate-50 p-8 rounded-[2rem] font-black text-xl outline-none shadow-inner" value={params.region} onChange={e => setParams({...params, region: e.target.value, location: ''})}><option value="">區域</option>{Object.keys(currentPath || {}).map(r => <option key={r} value={r}>{r}</option>)}</select><select className="flex-[1.5] bg-slate-50 p-8 rounded-[2rem] font-black text-xl outline-none shadow-inner border-2 border-transparent focus:border-indigo-100" value={params.location} onChange={e => setParams({...params, location: e.target.value})} disabled={!params.region}><option value="">機場名稱</option>{params.region && currentPath && Object.keys(currentPath[params.region]).map(c => currentPath[params.region][c].map(loc => <option key={loc} value={loc}>{loc}</option>))}</select></div></div>
+                </>
+              ) : (
+                <div className="md:col-span-2 space-y-4"><label className="text-base font-black text-indigo-500 uppercase tracking-widest ml-3">車站起訖選擇</label><div className="flex items-center gap-8 bg-slate-50 p-6 rounded-[3rem] shadow-inner"><select className="flex-1 bg-white p-8 rounded-[2.5rem] font-black text-3xl text-slate-800 outline-none shadow-xl border-2 border-transparent focus:border-indigo-100" value={params.start} onChange={e => setParams({...params, start: e.target.value})}>{TRANSPORT_DATA[activeTab.toUpperCase()]?.map(s => <option key={s} value={s}>{s}</option>)}</select><div className="bg-indigo-600 p-5 rounded-full text-white shadow-2xl animate-pulse"><ArrowRight size={36} /></div><select className="flex-1 bg-white p-8 rounded-[2.5rem] font-black text-3xl text-slate-800 outline-none shadow-xl border-2 border-transparent focus:border-indigo-100" value={params.end} onChange={e => setParams({...params, end: e.target.value})}>{TRANSPORT_DATA[activeTab.toUpperCase()]?.map(s => <option key={s} value={s}>{s}</option>)}</select></div></div>
+              )}
+            </div>
+            <div className="flex flex-col md:flex-row gap-10 items-end">
+              <div className="flex-1 w-full space-y-4"><label className="text-base font-black text-slate-400 uppercase tracking-widest ml-3">預計日期</label><div className="relative"><Calendar className="absolute left-8 top-8 text-slate-400" size={32} /><input type="date" className="w-full bg-slate-50 p-8 pl-20 rounded-[2rem] font-black text-2xl outline-none shadow-inner border-2 border-transparent focus:border-indigo-200" value={params.date} onChange={e => setParams({...params, date: e.target.value})} /></div></div>
+              <div className="flex-1 w-full space-y-4"><label className="text-base font-black text-slate-400 uppercase tracking-widest ml-3">發車時間</label><div className="relative"><Clock className="absolute left-8 top-8 text-slate-400" size={32} /><select className="w-full bg-slate-50 p-8 pl-20 rounded-[2rem] font-black text-2xl outline-none appearance-none cursor-pointer shadow-inner border-2 border-transparent focus:border-indigo-200" value={params.time} onChange={e => setParams({...params, time: e.target.value})}>{TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}</select></div></div>
+              <button onClick={() => transportSearch.search(activeTab === 'intl' ? 'FLIGHT_INTL' : (activeTab === 'dom' ? 'FLIGHT_DOM' : activeTab.toUpperCase()), params)} disabled={transportSearch.searching || ((activeTab === 'intl' || activeTab === 'dom') && !params.location)} className="w-full md:w-auto px-20 py-8 bg-indigo-600 text-white rounded-[2.5rem] font-black text-2xl shadow-3xl hover:bg-indigo-700 hover:-translate-y-2 transition-all active:scale-95 flex items-center justify-center gap-4">{transportSearch.searching ? <Loader2 className="animate-spin" size={32}/> : <><Search size={32}/> 查詢時刻</>}</button>
+            </div>
+          </div>
+        )}
+        <div className="space-y-12 mt-20">
+          {transportSearch.results.map((item) => (
+            <div key={item.id} className="bg-white p-10 md:p-14 rounded-[4rem] border border-slate-100 shadow-xl hover:shadow-3xl hover:border-sky-200 transition-all duration-700 animate-in zoom-in-95">
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-12">
+                <div className="flex flex-col sm:flex-row items-center gap-10">
+                  <div className={`p-4 py-6 rounded-[2rem] text-black min-w-[150px] text-center shadow-lg ${item.colorClass} flex flex-col justify-center items-center transform transition-transform hover:scale-105`}><div className="text-2xl font-black tracking-tighter leading-none mb-3">{item.code}</div><div className="text-sm font-black uppercase opacity-60 tracking-[0.2em] border-t border-black/10 pt-2 w-full">{item.airlineName || item.trainType}</div></div>
+                  <div><div className="flex items-center gap-8 font-black text-4xl md:text-5xl text-slate-800 tracking-tighter tabular-nums leading-tight">{item.departure} <ArrowRight size={48} className="text-slate-100"/> {item.arrival}</div><div className="flex flex-wrap items-center gap-6 mt-6"><span className="text-sm font-black text-slate-400 bg-slate-50 px-6 py-2.5 rounded-full shadow-inner flex items-center gap-3"><Clock size={18}/> {item.duration}</span><span className="text-sm font-black text-slate-400 bg-slate-50 px-6 py-2.5 rounded-full shadow-inner flex items-center gap-3"><Calendar size={18}/> {item.date}</span><span className="text-sm font-black text-emerald-500 bg-emerald-50 px-6 py-2.5 rounded-full shadow-sm border border-emerald-100">{item.status}</span></div></div>
+                </div>
+                <div className="text-right w-full lg:w-auto border-t lg:border-t-0 pt-10 lg:pt-0"><div className="text-5xl font-black text-emerald-600 leading-none tabular-nums drop-shadow-sm">新台幣 {item.price.toLocaleString()} 元</div>{item.priceNonReserved && <div className="text-base font-black text-slate-300 mt-4 tracking-[0.2em] uppercase opacity-70">自由座：新台幣 {item.priceNonReserved.toLocaleString()} 元</div>}</div>
+              </div>
+              {item.stops && item.stops.length > 0 && (
+                <div className="mt-14 pt-12 border-t-2 border-slate-50 overflow-x-auto scrollbar-hide"><div className="flex items-center min-w-max px-10 relative h-28"><div className="absolute top-[28px] left-14 right-14 h-2 bg-slate-100 rounded-full shadow-inner"></div>{item.stops.map((stop, idx) => { const isEnd = idx === 0 || idx === item.stops.length - 1; return (<div key={idx} className="flex flex-col items-center relative z-10 mx-12 first:ml-0 last:mr-0 group/stop"><div className={`bg-white p-3 rounded-[1.25rem] shadow-2xl border border-slate-50 transition-transform duration-500 ${isEnd ? 'scale-110 shadow-indigo-100 group-hover/stop:scale-125' : 'scale-90 opacity-60'}`}>{isEnd ? <MapPinned size={32} className={idx === 0 ? "text-indigo-600" : "text-emerald-600"} /> : <Circle size={20} className="text-slate-300" />}</div><span className={`text-base mt-5 font-black whitespace-nowrap tracking-tighter transition-all ${isEnd ? 'text-slate-800' : 'text-slate-400 group-hover/stop:text-indigo-600'}`}>{stop}</span></div>);})}</div></div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default App;

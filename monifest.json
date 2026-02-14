@@ -1,0 +1,22 @@
+{
+"name": "旅遊管家 Pro v31.9",
+"short_name": "旅遊管家",
+"description": "Mr. Yeh 的專業旅遊交通與匯率管家 (旗艦同步版)",
+"start_url": "index.html",
+"scope": "./",
+"display": "standalone",
+"background_color": "#FDFDFE",
+"theme_color": "#4F46E5",
+"icons": [
+{
+"src": "icon.png",
+"sizes": "192x192",
+"type": "image/png"
+},
+{
+"src": "icon.png",
+"sizes": "512x512",
+"type": "image/png"
+}
+]
+}
