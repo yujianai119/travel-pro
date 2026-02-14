@@ -43,7 +43,7 @@
             // 註冊 Service Worker
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('sw.js')
-                    .then(() => console.log('App Ready'))
+                    .then(() => console.log('Service Worker registered successfully'))
                     .catch(err => console.error('Service Worker registration failed:', err));
             }
 
@@ -68,7 +68,7 @@
         })();
 
         // --- 2. 旅遊管家 Pro 核心程式碼 ---
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useMemo } = React;
 
         function TravelApp() {
             const [activeTab, setActiveTab] = useState('transport');
