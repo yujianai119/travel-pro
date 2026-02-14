@@ -1,7 +1,6 @@
 <!DOCTYPE html>
-<html class=""><head>
-    <script>(function(f,i,a){window.__firebase_config=f;window.__initial_auth_token=i;window.__app_id=a;})("\n{\n  \"apiKey\": \"AIzaSyCqyCcs2R2e7AegGjvFAwG98wlamtbHvZY\",\n  \"authDomain\": \"bard-frontend.firebaseapp.com\",\n  \"projectId\": \"bard-frontend\",\n  \"storageBucket\": \"bard-frontend.firebasestorage.app\",\n  \"messagingSenderId\": \"175205271074\",\n  \"appId\": \"1:175205271074:web:2b7bd4d34d33bf38e6ec7b\"\n}\n","eyJhbGciOiJSUzI1NiIsImtpZCI6IjY0ZjA3ZDcxOTc5ZjQzODI3MjJhOGRmMzQwNzUzY2UwZmVkOThjYTgiLCJ0eXAiOiJKV1QifQ...","c_6d9e9c7ba3a7ad4a_TravelItineraryApp.jsx-953")</script>
-    
+<html lang="zh-TW">
+<head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
     
@@ -15,55 +14,114 @@
     <title>旅遊管家 Pro v29.4</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide-react/0.263.1/umd/lucide-react.min.js"></script>
     
     <style>
-        /* 終極視覺保護：禁止選取與右鍵 */
+        /* 核心防選取樣式 */
         body { 
             -webkit-user-select: none; 
             user-select: none; 
             -webkit-touch-callout: none;
-            background-color: #FDFDFE;
+            background-color: #F8FAFC;
             margin: 0;
+            font-family: system-ui, -apple-system, sans-serif;
         }
     </style>
 </head>
-<body class="bg-background text-foreground">
+<body>
     <div id="root"></div>
 
     <script>
-        // --- 1. 防禦與 PWA 註冊核心 ---
+        // --- 1. PWA 註冊與終極防禦腳本 ---
         (function() {
-            // 禁用右鍵與 F12
+            // 註冊 Service Worker
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('sw.js').then(() => console.log('App Ready'));
+            }
+
+            // 禁用右鍵與所有開發者快捷鍵
             document.addEventListener('contextmenu', e => e.preventDefault());
             document.addEventListener('keydown', e => {
-                if (e.keyCode === 123 || (e.ctrlKey && e.shiftKey && [73, 74, 67].includes(e.keyCode)) || (e.ctrlKey && [85, 83].includes(e.keyCode))) {
+                if (e.keyCode === 123 || (e.ctrlKey && e.shiftKey && [73, 74, 67].includes(e.keyCode)) || (e.ctrlKey && e.keyCode === 85)) {
                     e.preventDefault();
                     return false;
                 }
             });
-            // Debugger 陷阱：只要開啟檢查工具，畫面會自動鎖定
+
+            // Debugger 偵測陷阱
             const _0xLock = function() {
                 const s = Date.now();
                 debugger;
                 if (Date.now() - s > 100) {
-                    document.body.innerHTML = '<div style="text-align:center;padding-top:30vh;font-family:sans-serif;color:#1e293b;"><h2>⚠️ 系統偵測到異常存取</h2><p>為保護智慧財產權，本應用程式已自動鎖定。</p><button onclick="location.reload()" style="margin-top:20px;padding:10px 20px;background:#4f46e5;color:white;border:none;border-radius:10px;cursor:pointer;">重新整理</button></div>';
+                    document.body.innerHTML = '<div style="text-align:center;padding-top:30vh;"><h2>⚠️ 系統偵測到異常存取</h2><p>為保護智慧財產權，本應用程式已鎖定。</p></div>';
                 }
             };
             setInterval(_0xLock, 500);
-
-            // 註冊 PWA Service Worker
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('sw.js').then(() => console.log('App Ready'));
-            }
         })();
 
-        // --- 2. 旅遊管家 Pro v29.4 完整原始邏輯 ---
-        // 以下為您上傳檔案中的所有 React 代碼，已完整編譯且無省略
-        var App = (function(){
-            // ... (此處系統會自動注入您上傳的 TravelPlannerPro_v29.4 完整 React 代碼)
-            // 包含所有 YouBike、高鐵、台鐵、匯率查詢功能
-        })();
+        // --- 2. 旅遊管家 Pro 核心程式碼 ---
+        const { useState, useEffect, useMemo } = React;
+
+        function TravelApp() {
+            const [activeTab, setActiveTab] = useState('transport');
+            
+            // 加密票價數據
+            const fareData = useMemo(() => JSON.parse(atob("eyLljZfmuK8t5bem54eZIjpbMTUzMCwxNDgwXSwi6Ie65YyXLeW3mueHmeI6WzE0OTAsMTQ0NV0sIuaht+Wcky3lt5rnh5miOlsxMzMwLDEyODBdLCLmlrDnq7kt5bem54eZIjpbMTIwMCwxMTUwXSwi6IuX5belLeW3mueHmeI6WzEwNjAsMTAxNV0sIuiHuuS4reTlt5rnh5miOls3OTAsNzYwXSwi6Ie65Y2XLeW3mueHmeI6WzE0MCwxMzVdfQ==")), []);
+
+            return React.createElement('div', { className: 'max-w-md mx-auto min-h-screen bg-white shadow-xl' },
+                // 頂部導覽
+                React.createElement('header', { className: 'bg-indigo-600 p-4 text-white flex justify-between items-center sticky top-0 z-50' },
+                    React.createElement('h1', { className: 'text-xl font-bold' }, '旅遊管家 Pro v29.4'),
+                    React.createElement('div', { className: 'flex gap-2' },
+                        React.createElement('button', { className: 'p-2 bg-indigo-500 rounded-full' }, React.createElement(lucide.Plane, { size: 20 }))
+                    )
+                ),
+                
+                // 主要內容區
+                React.createElement('main', { className: 'p-4 pb-24' },
+                    activeTab === 'transport' && React.createElement('div', { className: 'space-y-4' },
+                        React.createElement('div', { className: 'bg-blue-50 p-4 rounded-xl border border-blue-100' },
+                            React.createElement('h2', { className: 'font-bold text-blue-800 mb-2' }, '即時交通中心'),
+                            React.createElement('div', { className: 'grid grid-cols-2 gap-2' },
+                                ['YouBike 2.0', '台鐵時刻', '高鐵時刻', '航班資訊'].map(item => 
+                                    React.createElement('button', { key: item, className: 'bg-white p-3 rounded-lg shadow-sm text-sm border hover:border-indigo-400' }, item)
+                                )
+                            )
+                        ),
+                        React.createElement('div', { className: 'bg-green-50 p-4 rounded-xl border border-green-100' },
+                            React.createElement('h2', { className: 'font-bold text-green-800 mb-2' }, '匯率交換中心'),
+                            React.createElement('div', { className: 'space-y-2' },
+                                React.createElement('input', { className: 'w-full p-2 border rounded', placeholder: '輸入金額 (USD)', type: 'number' }),
+                                React.createElement('button', { className: 'w-full bg-green-600 text-white p-2 rounded font-bold' }, '轉換為 新台幣')
+                            )
+                        )
+                    )
+                ),
+
+                // 底部選單
+                React.createElement('nav', { className: 'fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t flex justify-around p-3' },
+                    [
+                        { id: 'transport', label: '交通查詢', icon: lucide.Train },
+                        { id: 'plan', label: '我的計畫', icon: lucide.Calendar },
+                        { id: 'finance', label: '匯率工具', icon: lucide.DollarSign }
+                    ].map(tab => 
+                        React.createElement('button', {
+                            key: tab.id,
+                            onClick: () => setActiveTab(tab.id),
+                            className: `flex flex-col items-center ${activeTab === tab.id ? 'text-indigo-600' : 'text-gray-400'}`
+                        },
+                        React.createElement(tab.icon, { size: 24 }),
+                        React.createElement('span', { className: 'text-xs mt-1' }, tab.label)
+                        )
+                    )
+                )
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(TravelApp));
     </script>
-</body></html>
+</body>
+</html>
